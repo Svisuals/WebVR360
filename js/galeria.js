@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Defina o número total de imagens e o prefixo
     const totalImages = 10; // Ajuste o número total de imagens que você tem
     const prefix = 'imagenes360/360_'; // Prefixo com o caminho para a pasta
-    const suffix = '.jpg'; // Sufixo das imagens
+    const suffix = '.JPG'; // Sufixo das imagens
 
     const thumbnailContainer = document.getElementById('thumbnails');
     const image360 = document.getElementById('imagen360');
