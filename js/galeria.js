@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Defina o número de imagens e o prefixo
+    // Defina o número total de imagens e o prefixo
     const totalImages = 10; // Ajuste o número total de imagens que você tem
     const prefix = '360_'; // Prefixo das imagens
     const suffix = '.jpg'; // Sufixo das imagens
@@ -14,12 +14,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentIndex = 0;
 
     function updateImage(index) {
-        image360.setAttribute('src', `${prefix}${index + 1}${suffix}`);
+        const src = `${prefix}${index + 1}${suffix}`;
+        console.log('Atualizando imagem para:', src); // Log para depuração
+        image360.setAttribute('src', src);
     }
 
     function createThumbnail(index) {
+        const src = `${prefix}${index + 1}${suffix}`;
         const img = document.createElement('img');
-        img.src = `${prefix}${index + 1}${suffix}`;
+        img.src = src;
         img.className = 'thumbnail';
         img.addEventListener('click', () => {
             updateImage(index);
