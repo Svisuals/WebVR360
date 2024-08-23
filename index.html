@@ -3,67 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor VR 360</title>
+    <title>Visor 360° con Modo VR</title>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <style>
         body, html {
             margin: 0;
             padding: 0;
-            height: 100%;
-            overflow: hidden;
-        }
-
-        iframe {
             width: 100%;
             height: 100%;
-            border: none;
-        }
-
-        /* Estilo para ajustar el tamaño del visor VR en modo de pantalla completa */
-        #vrCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: black;
-            display: none;
-            justify-content: center;
-            align-items: center;
-        }
-
-        #vrCanvas canvas {
-            width: 90%; /* Ajustar el tamaño del canvas aquí */
-            height: auto;
-        }
-
-        /* Estilo para activar el canvas en modo VR */
-        .vr-active #vrCanvas {
-            display: flex;
         }
     </style>
 </head>
 <body>
 
-    <iframe id="embeddedPage" src="https://momento360.com/e/uc/ffb7f3f4f94d408aa0b3e54ec013f9d5?utm_campaign=embed&utm_source=other&size=large&display-plan=true" allowfullscreen></iframe>
+    <!-- Contenedor de la escena A-Frame -->
+    <a-scene>
+        <!-- Entidad de la cámara para permitir la navegación en 360° y VR -->
+        <a-camera wasd-controls-enabled="false" look-controls-enabled="true"></a-camera>
+        
+        <!-- Imagen 360° -->
+        <a-sky src="#imagen360"></a-sky>
 
-    <div id="vrCanvas">
-        <canvas id="vrViewport"></canvas>
-    </div>
+        <!-- Definir las imágenes 360° aquí -->
+        <a-assets>
+            <img id="360.jpg">
+        </a-assets>
 
-    <script>
-        // Ejemplo de cómo detectar si la página está en modo VR
-        function toggleVRMode(isVRActive) {
-            if (isVRActive) {
-                document.body.classList.add('vr-active');
-                // Aquí puedes agregar código para personalizar el canvas
-            } else {
-                document.body.classList.remove('vr-active');
-            }
-        }
-
-        // Puedes llamar a toggleVRMode(true) cuando detectes que el usuario ha activado el modo VR en el iframe
-        // y toggleVRMode(false) cuando lo desactive
-    </script>
+        <!-- Activar el botón VR en dispositivos móviles -->
+        <a-entity oculus-touch-controls="hand: left"></a-entity>
+        <a-entity oculus-touch-controls="hand: right"></a-entity>
+    </a-scene>
 
 </body>
 </html>
