@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Defina o número total de imagens e o prefixo
     const totalImages = 10; // Ajuste o número total de imagens que você tem
-    const prefix = '360_'; // Prefixo das imagens
+    const prefix = 'imagenes360/360_'; // Prefixo com o caminho para a pasta
     const suffix = '.jpg'; // Sufixo das imagens
 
     const thumbnailContainer = document.getElementById('thumbnails');
@@ -53,4 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let i = 0; i < totalImages; i++) {
         createThumbnail(i);
     }
+
+    // Define a imagem inicial
+    updateImage(currentIndex);
 });
