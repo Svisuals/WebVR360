@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>4D IFC Viewer Mejorado</title>
+  <title>Visualizador 4D IFC Mejorado</title>
   <style>
     body, html {
       margin: 0;
@@ -94,11 +94,12 @@
 
     const loadIfc = async () => {
       try {
-        const file = await fetch('https://thatopen.github.io/engine_components/resources/small.ifc');
-        const data = await file.arrayBuffer();
+        // Cargar el archivo IFC desde la misma carpeta
+        const fileResponse = await fetch('Modelo4D.ifc');
+        const data = await fileResponse.arrayBuffer();
         const buffer = new Uint8Array(data);
         model = await fragmentIfcLoader.load(buffer);
-        model.name = "IFC Model";
+        model.name = "Modelo4D";
         world.scene.three.add(model);
 
         // Mapear elementos del modelo a IDs de tareas
