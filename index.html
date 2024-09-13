@@ -1,89 +1,241 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tour Virtual 360 con Opción VR</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #f0f0f0;
-        }
-
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-
-        #vrButton {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            padding: 10px 20px;
-            font-size: 18px;
-            background-color: #000;
-            color: #fff;
-            border: none;
-            cursor: pointer;
-            display: none;
-            z-index: 10;
-        }
-
-        /* Layout VR simulado */
-        .vr-layout iframe {
-            width: 50%;
-            height: 100%;
-            position: fixed;
-            left: 0;
-        }
-
-        .vr-layout iframe:nth-child(2) {
-            left: 50%;
-        }
-
-        /* Mostrar botón solo en modo horizontal */
-        @media only screen and (orientation: landscape) {
-            #vrButton {
-                display: block;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>4D IFC Viewer Mejorado</title>
+  <style>
+    body, html {
+      margin: 0;
+      overflow: hidden;
+    }
+    #container {
+      width: 100vw;
+      height: 80vh;
+    }
+    #controls {
+      width: 100vw;
+      text-align: center;
+      padding: 10px;
+      background-color: #f0f0f0;
+    }
+    #slider {
+      width: 80%;
+    }
+    #dateDisplay {
+      font-size: 1.2em;
+      margin-bottom: 10px;
+    }
+    #legend {
+      margin-top: 10px;
+    }
+    .legend-item {
+      display: inline-block;
+      margin-right: 20px;
+    }
+    .legend-color {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+  </style>
 </head>
 <body>
-
-    <button id="vrButton">Activar/Desactivar Modo VR</button>
-
-    <div id="vrContainer">
-        <iframe src="https://momento360.com/e/uc/ffb7f3f4f94d408aa0b3e54ec013f9d5?utm_campaign=embed&utm_source=other&size=large&display-plan=true"></iframe>
+  <div id="container"></div>
+  <div id="controls">
+    <div id="dateDisplay">Fecha: --/--/----</div>
+    <input type="range" id="slider" min="0" max="100" value="0">
+    <div>
+      <button id="playButton">Reproducir</button>
+      <button id="pauseButton">Pausar</button>
     </div>
+    <div id="legend">
+      <div class="legend-item">
+        <span class="legend-color" style="background-color: #808080;"></span>No iniciado
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background-color: rgba(0, 255, 0, 0.3);"></span>En progreso
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background-color: #00ff00;"></span>Completado
+      </div>
+    </div>
+  </div>
 
-    <script>
-        const vrButton = document.getElementById('vrButton');
-        const vrContainer = document.getElementById('vrContainer');
+  <script type="module">
+    import * as OBC from 'https://cdn.jsdelivr.net/npm/@thatopen/components@latest';
+    import { IfcLoader } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@latest';
+    import Papa from 'https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js';
 
-        vrButton.addEventListener('click', () => {
-            vrContainer.classList.toggle('vr-layout');
-            if (vrContainer.classList.contains('vr-layout')) {
-                // Duplicar iframe para simular el layout VR
-                const iframeClone = vrContainer.querySelector('iframe').cloneNode(true);
-                vrContainer.appendChild(iframeClone);
-            } else {
-                // Eliminar el iframe duplicado cuando se desactiva el modo VR
-                const iframes = vrContainer.querySelectorAll('iframe');
-                if (iframes.length > 1) {
-                    vrContainer.removeChild(iframes[1]);
-                }
+    // Configuración del contenedor
+    const container = document.getElementById('container');
+
+    // Inicialización de los componentes
+    const components = new OBC.Components();
+    const world = components.get(OBC.Worlds).create(OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer);
+    world.scene = new OBC.SimpleScene(components);
+    world.renderer = new OBC.SimpleRenderer(components, container);
+    world.camera = new OBC.SimpleCamera(components);
+    world.camera.controls.setLookAt(12, 6, 8, 0, 0, -10);
+
+    components.init();
+    world.scene.setup();
+
+    // Variables globales
+    let model;
+    let schedule = [];
+    const modelElements = {};
+    let animationInterval;
+    let isPlaying = false;
+
+    // Cargar archivo IFC con manejo de errores
+    const fragmentIfcLoader = components.get(OBC.IfcLoader);
+
+    const loadIfc = async () => {
+      try {
+        const file = await fetch('https://thatopen.github.io/engine_components/resources/small.ifc');
+        const data = await file.arrayBuffer();
+        const buffer = new Uint8Array(data);
+        model = await fragmentIfcLoader.load(buffer);
+        model.name = "IFC Model";
+        world.scene.three.add(model);
+
+        // Mapear elementos del modelo a IDs de tareas
+        model.traverse((child) => {
+          if (child.isMesh) {
+            const taskId = child.userData?.properties?.Pset_AWP?.StringProperty;
+            if (taskId) {
+              modelElements[taskId] = child;
             }
+          }
         });
-    </script>
 
+      } catch (error) {
+        console.error('Error al cargar el modelo IFC:', error);
+      }
+    };
+    loadIfc();
+
+    // Cargar el CSV dinámicamente con manejo de errores y validación
+    const loadSchedule = () => {
+      Papa.parse('4D.csv', {
+        download: true,
+        header: true,
+        complete: function(results) {
+          if (results.errors.length) {
+            console.error('Errores al parsear el CSV:', results.errors);
+          } else {
+            schedule = results.data.filter(task => task.ID && task.Start && task.End);
+            initializeSlider();
+          }
+        },
+        error: function(err) {
+          console.error('Error al cargar el archivo CSV:', err);
+        }
+      });
+    };
+    loadSchedule();
+
+    // Variables para el control del tiempo
+    let scheduleStartDate;
+    let totalDuration;
+
+    // Función para inicializar el slider y manejar la actualización del progreso
+    const initializeSlider = () => {
+      if (schedule.length === 0) return;
+
+      const slider = document.getElementById('slider');
+      const dateDisplay = document.getElementById('dateDisplay');
+      scheduleStartDate = new Date(schedule[0].Start).getTime();
+      totalDuration = calculateTotalDuration(schedule);
+
+      slider.addEventListener('input', () => {
+        const progress = slider.value / 100; // 0 a 1
+        const currentTime = scheduleStartDate + totalDuration * progress;
+
+        dateDisplay.textContent = `Fecha: ${new Date(currentTime).toLocaleDateString()}`;
+        updateModelColors(currentTime);
+      });
+
+      // Inicializar visualización en la fecha de inicio
+      dateDisplay.textContent = `Fecha: ${new Date(scheduleStartDate).toLocaleDateString()}`;
+      updateModelColors(scheduleStartDate);
+    };
+
+    // Función para calcular la duración total desde la primera hasta la última fecha en el cronograma
+    const calculateTotalDuration = (schedule) => {
+      const startDate = new Date(schedule[0].Start).getTime();
+      const endDate = new Date(schedule[schedule.length - 1].End).getTime();
+      return endDate - startDate;
+    };
+
+    // Actualizar los colores del modelo basados en el progreso
+    const updateModelColors = (currentTime) => {
+      schedule.forEach((task) => {
+        const taskStart = new Date(task.Start).getTime();
+        const taskEnd = new Date(task.End).getTime();
+
+        let color, opacity;
+        if (currentTime < taskStart) {
+          color = 0x808080; // Gris para tareas no iniciadas
+          opacity = 0; // Completamente invisible
+        } else if (currentTime >= taskStart && currentTime < taskEnd) {
+          color = 0x00ff00; // Verde para tareas en progreso
+          opacity = 0.3; // Semitransparente
+        } else {
+          color = 0x00ff00; // Verde para tareas completadas
+          opacity = 1; // Totalmente visible
+        }
+
+        // Actualizar el elemento correspondiente en el modelo
+        const element = modelElements[task.ID];
+        if (element) {
+          if (!Array.isArray(element.material)) {
+            element.material = element.material.clone();
+          }
+          element.material.color.setHex(color);
+          element.material.opacity = opacity;
+          element.material.transparent = opacity < 1;
+        }
+      });
+    };
+
+    // Control de reproducción y pausa
+    const playButton = document.getElementById('playButton');
+    const pauseButton = document.getElementById('pauseButton');
+    const slider = document.getElementById('slider');
+
+    playButton.addEventListener('click', () => {
+      if (isPlaying) return;
+      isPlaying = true;
+      animationInterval = setInterval(() => {
+        if (slider.value < 100) {
+          slider.value = parseFloat(slider.value) + 1;
+          slider.dispatchEvent(new Event('input'));
+        } else {
+          clearInterval(animationInterval);
+          isPlaying = false;
+        }
+      }, 500); // Avanza cada 500 ms
+    });
+
+    pauseButton.addEventListener('click', () => {
+      clearInterval(animationInterval);
+      isPlaying = false;
+    });
+
+    // Accesibilidad: Control del slider con el teclado
+    slider.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' && slider.value < 100) {
+        slider.value = parseFloat(slider.value) + 1;
+        slider.dispatchEvent(new Event('input'));
+      } else if (event.key === 'ArrowLeft' && slider.value > 0) {
+        slider.value = parseFloat(slider.value) - 1;
+        slider.dispatchEvent(new Event('input'));
+      }
+    });
+
+  </script>
 </body>
 </html>
