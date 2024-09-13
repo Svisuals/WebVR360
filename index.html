@@ -63,36 +63,22 @@
     </div>
   </div>
 
-  <!-- Importar bibliotecas necesarias sin usar módulos -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/loaders/IFCLoader.js"></script>
+  <!-- Importar bibliotecas necesarias -->
+  <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Importar web-ifc-viewer en formato UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.167/dist/umd/IFC.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
 
   <script>
     // Configuración del contenedor
     const container = document.getElementById('container');
 
-    // Crear escena, cámara y renderizador
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    container.appendChild(renderer.domElement);
-
-    // Controles de órbita
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    camera.position.set(12, 6, 8);
-    controls.target.set(0, 0, -10);
-    controls.update();
-
-    // Añadir luz a la escena
-    const lightColor = 0xffffff;
-    const ambientLight = new THREE.AmbientLight(lightColor, 0.5);
-    scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(lightColor, 1);
-    directionalLight.position.set(0, 10, 0);
-    scene.add(directionalLight);
+    // Crear el visor de IFC
+    const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xffffff) });
+    viewer.axes.setAxes();
+    viewer.grid.setGrid();
+    viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.38/");
 
     // Variables globales
     let model;
@@ -102,49 +88,41 @@
     let isPlaying = false;
 
     // Cargar archivo IFC
-    const ifcLoader = new THREE.IFCLoader();
-    ifcLoader.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@latest/');
-
     const loadIfc = async () => {
       try {
-        // Ajustar la ruta al archivo IFC en GitHub Pages
+        // Ruta al archivo IFC en GitHub Pages
         const modelURL = 'Modelo4D.ifc';
-        ifcLoader.load(modelURL, async (ifcModel) => {
-          model = ifcModel;
-          scene.add(model);
+        model = await viewer.IFC.loadIfcUrl(modelURL);
 
-          // Mapear elementos del modelo a IDs de tareas
-          const manager = ifcLoader.ifcManager;
-          const buildingElements = await manager.getAllItemsOfType(0, IFCBUILDINGELEMENT, false);
+        // Mapear elementos del modelo a IDs de tareas
+        const manager = viewer.IFC.loader.ifcManager;
+        const allItems = await manager.getAllItemsOfType(model.modelID, null, false);
 
-          for (const elementID of buildingElements) {
-            const psets = await manager.getPropertySets(0, elementID);
-            const awpSet = psets.find(pset => pset.Name === 'Pset_AWP');
-            let taskId = null;
-            if (awpSet) {
-              for (const prop of awpSet.HasProperties) {
-                const propName = prop.Name.value;
-                const propValue = prop.NominalValue.value;
-                if (propName === 'StringProperty') {
-                  taskId = propValue;
-                  break;
-                }
+        for (const itemID of allItems) {
+          const psets = await manager.getPropertySets(model.modelID, itemID, true);
+          const awpSet = psets.find(pset => pset.Name.value === 'Pset_AWP');
+          let taskId = null;
+          if (awpSet) {
+            for (const propID of awpSet.HasProperties) {
+              const prop = await manager.getItemProperties(model.modelID, propID.value, true);
+              if (prop.Name.value === 'StringProperty') {
+                taskId = prop.NominalValue.value;
+                break;
               }
             }
-            if (taskId) {
-              modelElements[taskId] = elementID;
-            }
           }
+          if (taskId) {
+            modelElements[taskId] = itemID;
+          }
+        }
 
-          // Inicializar el slider después de cargar el modelo
+        // Inicializar el slider después de cargar el modelo
+        if (schedule.length > 0) {
           initializeSlider();
-
-        }, undefined, (error) => {
-          console.error('Error al cargar el modelo IFC:', error);
-        });
+        }
 
       } catch (error) {
-        console.error('Error en la función loadIfc:', error);
+        console.error('Error al cargar el modelo IFC:', error);
       }
     };
     loadIfc();
@@ -205,32 +183,33 @@
       return endDate - startDate;
     };
 
-    // Actualizar los colores del modelo basados en el progreso
+    // Función para actualizar los colores del modelo basados en el progreso
     const updateModelColors = (currentTime) => {
-      const manager = ifcLoader.ifcManager;
-
+      const manager = viewer.IFC.loader.ifcManager;
+      manager.resetMaterial(model.modelID);
       schedule.forEach((task) => {
         const taskStart = new Date(task.Start).getTime();
         const taskEnd = new Date(task.End).getTime();
 
         let color;
-        let opacity;
         if (currentTime < taskStart) {
           color = new THREE.Color(0x808080); // Gris para tareas no iniciadas
-          opacity = 0; // Completamente invisible
         } else if (currentTime >= taskStart && currentTime < taskEnd) {
           color = new THREE.Color(0x00ff00); // Verde para tareas en progreso
-          opacity = 0.3; // Semitransparente
         } else {
           color = new THREE.Color(0x00ff00); // Verde para tareas completadas
-          opacity = 1; // Totalmente visible
         }
 
         const elementID = modelElements[task.ID];
         if (elementID) {
-          // Aplicar el color y la opacidad al elemento
-          manager.setColor(0, [elementID], color);
-          manager.setOpacity(0, [elementID], opacity);
+          manager.createSubset({
+            modelID: model.modelID,
+            ids: [elementID],
+            material: new THREE.MeshLambertMaterial({ color: color }),
+            scene: viewer.context.getScene(),
+            removePrevious: false,
+            customID: task.ID
+          });
         }
       });
     };
@@ -273,8 +252,7 @@
     // Función de animación
     const animate = () => {
       requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
+      viewer.context.renderer.render(viewer.context.getScene(), viewer.context.getCamera());
     };
     animate();
 
