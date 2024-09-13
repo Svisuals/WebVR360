@@ -66,7 +66,7 @@
   <!-- Importar bibliotecas necesarias sin usar módulos -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@thatopen/ifc-loader@latest/dist/IFCLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/loaders/IFCLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
 
   <script>
@@ -102,39 +102,49 @@
     let isPlaying = false;
 
     // Cargar archivo IFC
-    const ifcLoader = new IFCLoader();
+    const ifcLoader = new THREE.IFCLoader();
     ifcLoader.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@latest/');
 
     const loadIfc = async () => {
       try {
         // Ajustar la ruta al archivo IFC en GitHub Pages
         const modelURL = 'Modelo4D.ifc';
-        model = await ifcLoader.loadAsync(modelURL);
-        scene.add(model);
+        ifcLoader.load(modelURL, async (ifcModel) => {
+          model = ifcModel;
+          scene.add(model);
 
-        // Mapear elementos del modelo a IDs de tareas
-        const manager = ifcLoader.ifcManager;
-        const allItems = await manager.getAllItemsOfType(0, IFCBUILDINGELEMENT, false);
-        for (const itemID of allItems) {
-          const psets = await manager.getPropertySets(0, itemID);
-          const awpSet = psets.find(pset => pset.Name.value === 'Pset_AWP');
-          let taskId = null;
-          if (awpSet) {
-            for (const prop of awpSet.HasProperties) {
-              const propName = prop.Name.value;
-              const propValue = prop.NominalValue.value;
-              if (propName === 'StringProperty') {
-                taskId = propValue;
-                break;
+          // Mapear elementos del modelo a IDs de tareas
+          const manager = ifcLoader.ifcManager;
+          const buildingElements = await manager.getAllItemsOfType(0, IFCBUILDINGELEMENT, false);
+
+          for (const elementID of buildingElements) {
+            const psets = await manager.getPropertySets(0, elementID);
+            const awpSet = psets.find(pset => pset.Name === 'Pset_AWP');
+            let taskId = null;
+            if (awpSet) {
+              for (const prop of awpSet.HasProperties) {
+                const propName = prop.Name.value;
+                const propValue = prop.NominalValue.value;
+                if (propName === 'StringProperty') {
+                  taskId = propValue;
+                  break;
+                }
               }
             }
+            if (taskId) {
+              modelElements[taskId] = elementID;
+            }
           }
-          if (taskId) {
-            modelElements[taskId] = itemID;
-          }
-        }
+
+          // Inicializar el slider después de cargar el modelo
+          initializeSlider();
+
+        }, undefined, (error) => {
+          console.error('Error al cargar el modelo IFC:', error);
+        });
+
       } catch (error) {
-        console.error('Error al cargar el modelo IFC:', error);
+        console.error('Error en la función loadIfc:', error);
       }
     };
     loadIfc();
@@ -149,7 +159,10 @@
             console.error('Errores al parsear el CSV:', results.errors);
           } else {
             schedule = results.data.filter(task => task.ID && task.Start && task.End);
-            initializeSlider();
+            // Inicializar el slider si el modelo ya está cargado
+            if (model) {
+              initializeSlider();
+            }
           }
         },
         error: function(err) {
@@ -165,7 +178,7 @@
 
     // Función para inicializar el slider y manejar la actualización del progreso
     const initializeSlider = () => {
-      if (schedule.length === 0) return;
+      if (schedule.length === 0 || !model) return;
 
       const slider = document.getElementById('slider');
       const dateDisplay = document.getElementById('dateDisplay');
