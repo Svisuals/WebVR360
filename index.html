@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Visualizador 4D IFC en GitHub Pages</title>
+  <title>Visualizador 4D IFC Mejorado</title>
   <style>
     body, html {
       margin: 0;
@@ -64,9 +64,9 @@
   </div>
 
   <!-- Importar bibliotecas necesarias sin usar módulos -->
-  <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://unpkg.com/ifcjs@0.0.119/IFC.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@thatopen/ifc-loader@latest/dist/IFCLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
 
   <script>
@@ -102,24 +102,22 @@
     let isPlaying = false;
 
     // Cargar archivo IFC
-    const ifcLoader = new IFC.IFCLoader();
-    ifcLoader.ifcManager.setWasmPath('https://unpkg.com/ifcjs@0.0.119/');
+    const ifcLoader = new IFCLoader();
+    ifcLoader.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@latest/');
 
     const loadIfc = async () => {
       try {
         // Ajustar la ruta al archivo IFC en GitHub Pages
         const modelURL = 'Modelo4D.ifc';
-        const ifcModel = await ifcLoader.loadAsync(modelURL);
-        model = ifcModel;
+        model = await ifcLoader.loadAsync(modelURL);
         scene.add(model);
 
         // Mapear elementos del modelo a IDs de tareas
         const manager = ifcLoader.ifcManager;
-        const allItems = await manager.getAllItemsOfType(0, IFC.IFCBUILDINGELEMENT, true);
-        for (const item of allItems) {
-          const props = await manager.getItemProperties(0, item.expressID);
-          const psets = await manager.getPropertySets(0, item.expressID);
-          const awpSet = psets.find(pset => pset.Name === 'Pset_AWP');
+        const allItems = await manager.getAllItemsOfType(0, IFCBUILDINGELEMENT, false);
+        for (const itemID of allItems) {
+          const psets = await manager.getPropertySets(0, itemID);
+          const awpSet = psets.find(pset => pset.Name.value === 'Pset_AWP');
           let taskId = null;
           if (awpSet) {
             for (const prop of awpSet.HasProperties) {
@@ -132,7 +130,7 @@
             }
           }
           if (taskId) {
-            modelElements[taskId] = item.expressID;
+            modelElements[taskId] = itemID;
           }
         }
       } catch (error) {
@@ -197,25 +195,31 @@
     // Actualizar los colores del modelo basados en el progreso
     const updateModelColors = (currentTime) => {
       const manager = ifcLoader.ifcManager;
-      for (const task of schedule) {
+
+      schedule.forEach((task) => {
         const taskStart = new Date(task.Start).getTime();
         const taskEnd = new Date(task.End).getTime();
 
         let color;
+        let opacity;
         if (currentTime < taskStart) {
           color = new THREE.Color(0x808080); // Gris para tareas no iniciadas
+          opacity = 0; // Completamente invisible
         } else if (currentTime >= taskStart && currentTime < taskEnd) {
           color = new THREE.Color(0x00ff00); // Verde para tareas en progreso
+          opacity = 0.3; // Semitransparente
         } else {
           color = new THREE.Color(0x00ff00); // Verde para tareas completadas
+          opacity = 1; // Totalmente visible
         }
 
         const elementID = modelElements[task.ID];
         if (elementID) {
-          // Aplicar el color al elemento
-          manager.setColor(elementID, color);
+          // Aplicar el color y la opacidad al elemento
+          manager.setColor(0, [elementID], color);
+          manager.setOpacity(0, [elementID], opacity);
         }
-      }
+      });
     };
 
     // Control de reproducción y pausa
