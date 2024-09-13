@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Visualizador 4D IFC Mejorado</title>
+  <title>Visualizador 4D IFC en GitHub Pages</title>
   <style>
     body, html {
       margin: 0;
@@ -89,12 +89,12 @@
     let animationInterval;
     let isPlaying = false;
 
-    // Cargar archivo IFC con manejo de errores
+    // Cargar archivo IFC desde GitHub Pages
     const fragmentIfcLoader = components.get(OBC.IfcLoader);
 
     const loadIfc = async () => {
       try {
-        // Cargar el archivo IFC desde la misma carpeta
+        // Ajustar la ruta al archivo IFC en GitHub Pages
         const fileResponse = await fetch('Modelo4D.ifc');
         const data = await fileResponse.arrayBuffer();
         const buffer = new Uint8Array(data);
@@ -118,7 +118,7 @@
     };
     loadIfc();
 
-    // Cargar el CSV dinámicamente con manejo de errores y validación
+    // Cargar el CSV desde GitHub Pages
     const loadSchedule = () => {
       Papa.parse('4D.csv', {
         download: true,
