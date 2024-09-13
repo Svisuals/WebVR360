@@ -63,24 +63,36 @@
     </div>
   </div>
 
-  <script type="module">
-    import * as OBC from 'https://cdn.jsdelivr.net/npm/@thatopen/components@latest';
-    import { IfcLoader } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@latest';
-    import Papa from 'https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js';
+  <!-- Importar bibliotecas necesarias sin usar módulos -->
+  <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/ifcjs@0.0.119/IFC.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
 
+  <script>
     // Configuración del contenedor
     const container = document.getElementById('container');
 
-    // Inicialización de los componentes
-    const components = new OBC.Components();
-    const world = components.get(OBC.Worlds).create(OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer);
-    world.scene = new OBC.SimpleScene(components);
-    world.renderer = new OBC.SimpleRenderer(components, container);
-    world.camera = new OBC.SimpleCamera(components);
-    world.camera.controls.setLookAt(12, 6, 8, 0, 0, -10);
+    // Crear escena, cámara y renderizador
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
 
-    components.init();
-    world.scene.setup();
+    // Controles de órbita
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    camera.position.set(12, 6, 8);
+    controls.target.set(0, 0, -10);
+    controls.update();
+
+    // Añadir luz a la escena
+    const lightColor = 0xffffff;
+    const ambientLight = new THREE.AmbientLight(lightColor, 0.5);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(lightColor, 1);
+    directionalLight.position.set(0, 10, 0);
+    scene.add(directionalLight);
 
     // Variables globales
     let model;
@@ -89,29 +101,40 @@
     let animationInterval;
     let isPlaying = false;
 
-    // Cargar archivo IFC desde GitHub Pages
-    const fragmentIfcLoader = components.get(OBC.IfcLoader);
+    // Cargar archivo IFC
+    const ifcLoader = new IFC.IFCLoader();
+    ifcLoader.ifcManager.setWasmPath('https://unpkg.com/ifcjs@0.0.119/');
 
     const loadIfc = async () => {
       try {
         // Ajustar la ruta al archivo IFC en GitHub Pages
-        const fileResponse = await fetch('Modelo4D.ifc');
-        const data = await fileResponse.arrayBuffer();
-        const buffer = new Uint8Array(data);
-        model = await fragmentIfcLoader.load(buffer);
-        model.name = "Modelo4D";
-        world.scene.three.add(model);
+        const modelURL = 'Modelo4D.ifc';
+        const ifcModel = await ifcLoader.loadAsync(modelURL);
+        model = ifcModel;
+        scene.add(model);
 
         // Mapear elementos del modelo a IDs de tareas
-        model.traverse((child) => {
-          if (child.isMesh) {
-            const taskId = child.userData?.properties?.Pset_AWP?.StringProperty;
-            if (taskId) {
-              modelElements[taskId] = child;
+        const manager = ifcLoader.ifcManager;
+        const allItems = await manager.getAllItemsOfType(0, IFC.IFCBUILDINGELEMENT, true);
+        for (const item of allItems) {
+          const props = await manager.getItemProperties(0, item.expressID);
+          const psets = await manager.getPropertySets(0, item.expressID);
+          const awpSet = psets.find(pset => pset.Name === 'Pset_AWP');
+          let taskId = null;
+          if (awpSet) {
+            for (const prop of awpSet.HasProperties) {
+              const propName = prop.Name.value;
+              const propValue = prop.NominalValue.value;
+              if (propName === 'StringProperty') {
+                taskId = propValue;
+                break;
+              }
             }
           }
-        });
-
+          if (taskId) {
+            modelElements[taskId] = item.expressID;
+          }
+        }
       } catch (error) {
         console.error('Error al cargar el modelo IFC:', error);
       }
@@ -173,33 +196,26 @@
 
     // Actualizar los colores del modelo basados en el progreso
     const updateModelColors = (currentTime) => {
-      schedule.forEach((task) => {
+      const manager = ifcLoader.ifcManager;
+      for (const task of schedule) {
         const taskStart = new Date(task.Start).getTime();
         const taskEnd = new Date(task.End).getTime();
 
-        let color, opacity;
+        let color;
         if (currentTime < taskStart) {
-          color = 0x808080; // Gris para tareas no iniciadas
-          opacity = 0; // Completamente invisible
+          color = new THREE.Color(0x808080); // Gris para tareas no iniciadas
         } else if (currentTime >= taskStart && currentTime < taskEnd) {
-          color = 0x00ff00; // Verde para tareas en progreso
-          opacity = 0.3; // Semitransparente
+          color = new THREE.Color(0x00ff00); // Verde para tareas en progreso
         } else {
-          color = 0x00ff00; // Verde para tareas completadas
-          opacity = 1; // Totalmente visible
+          color = new THREE.Color(0x00ff00); // Verde para tareas completadas
         }
 
-        // Actualizar el elemento correspondiente en el modelo
-        const element = modelElements[task.ID];
-        if (element) {
-          if (!Array.isArray(element.material)) {
-            element.material = element.material.clone();
-          }
-          element.material.color.setHex(color);
-          element.material.opacity = opacity;
-          element.material.transparent = opacity < 1;
+        const elementID = modelElements[task.ID];
+        if (elementID) {
+          // Aplicar el color al elemento
+          manager.setColor(elementID, color);
         }
-      });
+      }
     };
 
     // Control de reproducción y pausa
@@ -236,6 +252,14 @@
         slider.dispatchEvent(new Event('input'));
       }
     });
+
+    // Función de animación
+    const animate = () => {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
 
   </script>
 </body>
